@@ -131,7 +131,6 @@ def hm_value(params, cost, pr_obs, pr_trans, states, beta):
     
     #set up matrices, transition is deterministic
     trans0, trans1 = pr_trans
-    
     #calculate value function for all state
 
     pr_tile = np.tile( pr_obs.reshape( len(states) ,1), (1, len(states) ))
@@ -152,7 +151,7 @@ def hm_prob(params, cost, pr_obs, pr_trans, states, beta):
     value = hm_value(params, cost, pr_obs, pr_trans, states, beta)
     value = value - value.min() #subtract out smallest value
     trans0, trans1 = pr_trans
-    
+
     delta1 = np.exp( cost(params, states, 1) + beta*trans1.dot(value))
     delta0 = np.exp( cost(params, states, 0) + beta*trans0.dot(value) )
     
@@ -164,7 +163,7 @@ class CCP(GenericLikelihoodModel):
     using the CCP routine and the helper functions
     above"""
     
-    def __init__(self, i, x, x_next, params, cost, **kwds):
+    def __init__(self, i, x, x_next, params, cost, beta, **kwds):
         """initialize the class
         
         i - replacement decisions
@@ -177,7 +176,7 @@ class CCP(GenericLikelihoodModel):
 
 
         ##size of step in discretization
-        self.beta = .9999
+        self.beta = beta
         self.states = create_states(x)
 
         #data
@@ -210,7 +209,7 @@ class CCP(GenericLikelihoodModel):
         
         log_likelihood = (1-i)*np.log(1-prob) + i*np.log(prob)
         
-        return -log_likelihood.sum()
+        return -log_likelihood
     
     
     def iterate(self, numiter):
@@ -229,17 +228,18 @@ class CCP(GenericLikelihoodModel):
 
 ####################################################################################
 
-"""
-def setup_test(yn, xn):
-    model1 = NashLogit(yn, xn)
-    model1_fit = model1.fit(disp=False)
+
+def setup_test(data):
+    linear_cost = lambda params, x, i: (1-i)*x*params[i] + i*params[i]
+    model1 = CCP(data['replace'], data['miles'], data['miles_next'], ['theta1','RC'], linear_cost,0)
+    model1_fit = model1.results
     ll1 = model1.loglikeobs(model1_fit.params)
     grad1 = model1.score_obs(model1_fit.params)
     hess1 = model1.hessian(model1_fit.params)
     params1 = model1_fit.params
 
-    model2 = BayesNashLogit(yn, xn)
-    model2_fit = model2.fit(disp=False)
+    model2 = CCP(data['replace'], data['miles'], data['miles_next'], ['theta1','RC'], linear_cost,.9999)
+    model2_fit = model2.results
     ll2 = model2.loglikeobs(model2_fit.params)
     grad2 = model2.score_obs(model2_fit.params)
     hess2 = model2.hessian(model2_fit.params)
@@ -248,19 +248,22 @@ def setup_test(yn, xn):
     return ll1, grad1, hess1, params1, ll2, grad2, hess2, params2
 
 
-def regular_test(yn, xn, setup_test):
-    ll1, grad1, hess1, params1, ll2, grad2, hess2, params2 = setup_test(yn, xn)
+def regular_test(data, setup_test):
+    ll1, grad1, hess1, params1, ll2, grad2, hess2, params2 = setup_test(data)
     nobs = ll1.shape[0]
     llr = (ll1 - ll2).sum()
     omega = np.sqrt((ll1 - ll2).var())
     test_stat = llr/(omega*np.sqrt(nobs))
-    return 1*(test_stat >= 1.96) + 2*(test_stat <= -1.96)
+    print('regular: test, llr, omega ----')
+    print(test_stat, llr, omega)
+    print('---- ')
+    return 1*(test_stat >= 1.96) + 2*(test_stat <= -1.96),test_stat
 
 
 # helper functions for bootstrap
 
 def compute_eigen2(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2):
-    
+    """required for computing bias adjustement for the test"""
     n = ll1.shape[0]
     hess1 = hess1/n
     hess2 = hess2/n
@@ -287,46 +290,56 @@ def compute_eigen2(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2):
     return V
 
 
-
-def bootstrap_distr(ll1, grad1, hess1, params1, ll2, grad2, hess2, params2, c=0, trials=500):
+def bootstrap_distr(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2,c=0,trials=500):
     nobs = ll1.shape[0]
-
+    
     test_stats = []
     variance_stats = []
     llr = ll1-ll2
-
+     
     for i in range(trials):
         np.random.seed()
-        sample = np.random.choice(np.arange(0, nobs), nobs, replace=True)
+        sample  = np.random.choice(np.arange(0,nobs),nobs,replace=True)
         llrs = llr[sample]
-        test_stats.append(llrs.sum())
-        variance_stats.append(llrs.var())
+        test_stats.append( llrs.sum() )
+        variance_stats.append( llrs.var() )
 
-    # final product, bootstrap
-    V = compute_eigen2(ll1, grad1, hess1, params1, ll2, grad2, hess2, params2)
-    test_stats = np.array(test_stats + V.sum()/(2))
+
+    #final product, bootstrap
+    V =  compute_eigen2(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2)
+    test_stats = np.array(test_stats+ V.sum()/(2))
     variance_stats = np.sqrt(np.array(variance_stats)*nobs + c*(V*V).sum())
 
-    # set up test stat
+    #set up test stat   
     omega = np.sqrt((ll1 - ll2).var()*nobs + c*(V*V).sum())
-    llr = (ll1 - ll2).sum() + V.sum()/(2)
-
-    return test_stats, variance_stats, llr, omega
+    llr = (ll1 - ll2).sum() +V.sum()/(2)
+    return test_stats,variance_stats,llr,omega
 
 # TODO 4: Get Bootstrap test working
 
+def bootstrap_test(data,setup_test,c=0,trials=500):
+    ll1,grad1,hess1,params1,ll2,grad2,hess2,params2 = setup_test(data)
 
-def bootstrap_test(yn, xn, setup_test, c=0, trials=500):
-    ll1, grad1, hess1, params1, ll2, grad2, hess2, params2 = setup_test(yn, xn)
-
-    # set up bootstrap distr
-    test_stats, variance_stats, llr, omega = bootstrap_distr(
-        ll1, grad1, hess1, params1, ll2, grad2, hess2, params2, c=c, trials=trials)
+    #set up bootstrap distr
+    test_stats,variance_stats,llr,omega  = bootstrap_distr(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2,c=c,trials=trials)
     test_stats = test_stats/variance_stats
-
-    # set up confidence intervals
+    
+    #set up confidence intervals
     cv_lower = np.percentile(test_stats, 2.5, axis=0)
     cv_upper = np.percentile(test_stats, 97.5, axis=0)
+    print('---- bootstrap: llr, omega ----')
+    print(llr,omega)
+    print('----')
 
-    return 2*(0 >= cv_upper) + 1*(0 <= cv_lower)
-"""
+    return  2*(0 >= cv_upper) + 1*(0 <= cv_lower), cv_lower, cv_upper
+
+
+def test_table(data,setup_test, trials=100):
+    result_boot, cv_lower, cv_upper = bootstrap_test(data,setup_test, trials=trials)
+    result_class, test_stat = regular_test(data,setup_test)
+
+    print('\\begin{center}\n\\begin{tabular}{cccc}\n\\toprule')
+    print('\\textbf{Version} & \\textbf{Result} & \\textbf{Stat} & \\textbf{95 \\% CI} \\\\ \\midrule' )
+    print('Bootstrap & H%s & -- & [%.3f, %.3f] \\\\'%(result_boot,cv_lower,cv_upper))
+    print('Classical & H%s & %.3f & [1.959, 1.959] \\\\'%(result_class,test_stat))
+    print('\\bottomrule\n\\end{tabular}\n\\end{center}')

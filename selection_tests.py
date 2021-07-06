@@ -232,6 +232,7 @@ class CCP(GenericLikelihoodModel):
 def setup_test(data):
     linear_cost = lambda params, x, i: (1-i)*x*params[i] + i*params[i]
     model1 = CCP(data['replace'], data['miles'], data['miles_next'], ['theta1','RC'], linear_cost,0)
+    print(model1.results.params)
     model1_fit = model1.results
     ll1 = model1.loglikeobs(model1_fit.params)
     grad1 = model1.score_obs(model1_fit.params)
@@ -240,6 +241,7 @@ def setup_test(data):
 
     model2 = CCP(data['replace'], data['miles'], data['miles_next'], ['theta1','RC'], linear_cost,.9999)
     model2_fit = model2.results
+    print(model2.results.params)
     ll2 = model2.loglikeobs(model2_fit.params)
     grad2 = model2.score_obs(model2_fit.params)
     hess2 = model2.hessian(model2_fit.params)
@@ -338,8 +340,8 @@ def test_table(data,setup_test, trials=100):
     result_boot, cv_lower, cv_upper = bootstrap_test(data,setup_test, trials=trials)
     result_class, test_stat = regular_test(data,setup_test)
 
-    print('\\begin{center}\n\\begin{tabular}{cccc}\n\\toprule')
-    print('\\textbf{Version} & \\textbf{Result} & \\textbf{Stat} & \\textbf{95 \\% CI} \\\\ \\midrule' )
-    print('Bootstrap & H%s & -- & [%.3f, %.3f] \\\\'%(result_boot,cv_lower,cv_upper))
-    print('Classical & H%s & %.3f & [1.959, 1.959] \\\\'%(result_class,test_stat))
+    print('\\begin{center}\n\\begin{tabular}{ccc}\n\\toprule')
+    print('\\textbf{Version} & \\textbf{Result} & \\textbf{95 \\% CI} \\\\ \\midrule' )
+    print('Bootstrap & H%s & [%.3f, %.3f] \\\\'%(result_boot,cv_lower,cv_upper))
+    print('Classical & H%s & [%.3f, %.3f] \\\\'%(result_class,test_stat- 1.959,test_stat+ 1.959))
     print('\\bottomrule\n\\end{tabular}\n\\end{center}')

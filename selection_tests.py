@@ -13,7 +13,7 @@ from scipy.stats import norm
 import statsmodels.api as sm
 from statsmodels.base.model import GenericLikelihoodModel
 
-
+from shi_test import *
 
 
 #################################################
@@ -302,7 +302,7 @@ def bootstrap_distr(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2,c=0,trials=5
     for i in range(trials):
         np.random.seed()
         sample  = np.random.choice(np.arange(0,nobs),nobs,replace=True)
-        llrs = llr[sample]
+        llrs = np.array(llr)[sample]
         test_stats.append( llrs.sum() )
         variance_stats.append( llrs.var() )
 
@@ -339,9 +339,11 @@ def bootstrap_test(data,setup_test,c=0,trials=500):
 def test_table(data,setup_test, trials=100):
     result_boot, cv_lower, cv_upper = bootstrap_test(data,setup_test, trials=trials)
     result_class, test_stat = regular_test(data,setup_test)
+    result_shi, stat_shi, cv_shi= ndVuong(data,setup_test)
 
     print('\\begin{center}\n\\begin{tabular}{ccc}\n\\toprule')
     print('\\textbf{Version} & \\textbf{Result} & \\textbf{95 \\% CI} \\\\ \\midrule' )
     print('Bootstrap & H%s & [%.3f, %.3f] \\\\'%(result_boot,cv_lower,cv_upper))
+    print('Shi (2015) & H%s & [%.3f, %.3f] \\\\'%(result_shi, stat_shi- cv_shi,stat_shi+ cv_shi))
     print('Classical & H%s & [%.3f, %.3f] \\\\'%(result_class,test_stat- 1.959,test_stat+ 1.959))
     print('\\bottomrule\n\\end{tabular}\n\\end{center}')

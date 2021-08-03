@@ -247,7 +247,7 @@ def setup_test(data):
     hess2 = model2.hessian(model2_fit.params)
     params2 = model2_fit.params
 
-    return ll1, grad1, hess1, params1, ll2, grad2, hess2, params2
+    return ll2, grad2, hess2, params2, ll1, grad1, hess1, params1 #switched models...
 
 
 def regular_test(data, setup_test):

@@ -306,7 +306,6 @@ def bootstrap_distr(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2,c=0,trials=5
         test_stats.append( llrs.sum() )
         variance_stats.append( llrs.var() )
 
-
     #final product, bootstrap
     V =  compute_eigen2(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2)
     test_stats = np.array(test_stats+ V.sum()/(2))
@@ -319,7 +318,7 @@ def bootstrap_distr(ll1,grad1,hess1,params1,ll2,grad2,hess2,params2,c=0,trials=5
 
 # TODO 4: Get Bootstrap test working
 
-def bootstrap_test(data,setup_test,c=0,trials=500):
+def bootstrap_test(data,setup_test,c=0,trials=500,alpha=.05):
     ll1,grad1,hess1,params1,ll2,grad2,hess2,params2 = setup_test(data)
 
     #set up bootstrap distr
@@ -327,23 +326,40 @@ def bootstrap_test(data,setup_test,c=0,trials=500):
     test_stats = test_stats/variance_stats
     
     #set up confidence intervals
-    cv_lower = np.percentile(test_stats, 2.5, axis=0)
-    cv_upper = np.percentile(test_stats, 97.5, axis=0)
-    print('---- bootstrap: llr, omega ----')
-    print(llr,omega)
-    print('----')
+    cv_lower = np.percentile(test_stats, 50*alpha, axis=0)
+    cv_upper = np.percentile(test_stats, 100-50*alpha, axis=0)
 
     return  2*(0 >= cv_upper) + 1*(0 <= cv_lower), cv_lower, cv_upper
 
 
 def test_table(data,setup_test, trials=100):
-    result_boot, cv_lower, cv_upper = bootstrap_test(data,setup_test, trials=trials)
+    
+    #bootstrap cv
+    result_boot, cv_lower1, cv_upper1 = bootstrap_test(data,setup_test, trials=trials,alpha=.1)
+    result_boot, cv_lower2, cv_upper2 = bootstrap_test(data,setup_test, trials=trials,alpha=.05)
+    result_boot, cv_lower3, cv_upper3 = bootstrap_test(data,setup_test, trials=trials,alpha=.01)
+    
+    #regular result
     result_class, test_stat = regular_test(data,setup_test)
-    result_shi, stat_shi, cv_shi= ndVuong(data,setup_test)
+    
+    #shi results
+    result_shi, stat_shi1, cv_shi1= ndVuong(data,setup_test,alpha=.1)
+    result_shi, stat_shi2, cv_shi2= ndVuong(data,setup_test,alpha=.05)
+    result_shi, stat_shi3, cv_shi3= ndVuong(data,setup_test,alpha=.01)
 
-    print('\\begin{center}\n\\begin{tabular}{ccc}\n\\toprule')
-    print('\\textbf{Version} & \\textbf{Result} & \\textbf{95 \\% CI} \\\\ \\midrule' )
-    print('Bootstrap & H%s & [%.3f, %.3f] \\\\'%(result_boot,cv_lower,cv_upper))
-    print('Shi (2015) & H%s & [%.3f, %.3f] \\\\'%(result_shi, stat_shi- cv_shi,stat_shi+ cv_shi))
-    print('Classical & H%s & [%.3f, %.3f] \\\\'%(result_class,test_stat- 1.959,test_stat+ 1.959))
+
+    print('\\begin{center}\n\\begin{tabular}{ccccc}\n\\toprule')
+    print('\\textbf{Version} & \\textbf{Result} & \\textbf{90 \\% CI} & \\textbf{95 \\% CI} & \\textbf{99 \\% CI} \\\\ \\midrule' )
+    print('Shi (2015) & H%s & [%.3f, %.3f] & [%.3f, %.3f] & [%.3f, %.3f] \\\\'%(result_shi, 
+                                                  stat_shi1- cv_shi1, stat_shi1+ cv_shi1,
+                                                  stat_shi2- cv_shi2,stat_shi2+ cv_shi2,
+                                                  stat_shi3- cv_shi3,stat_shi3+ cv_shi3))
+    print('Classical & H%s & [%.3f, %.3f] & [%.3f, %.3f] & [%.3f, %.3f] \\\\'%(result_class,
+                                                 test_stat- 1.645,test_stat+ 1.645,
+                                                 test_stat- 1.959,test_stat+ 1.959,
+                                                 test_stat- 2.576,test_stat+ 2.576))
+    print('Bootstrap & H%s & [%.3f, %.3f] & [%.3f, %.3f] & [%.3f, %.3f] \\\\'%(result_boot,
+                                                 cv_lower1,cv_upper1,
+                                                 cv_lower2,cv_upper2,
+                                                 cv_lower3,cv_upper3))
     print('\\bottomrule\n\\end{tabular}\n\\end{center}')
